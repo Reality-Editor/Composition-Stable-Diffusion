@@ -2,7 +2,6 @@
 
 ### We achieve image composition via Stable Diffusion Model. Application includes Virtual Clothes / Funiture Try-on.
 
----
 <!-- ![Example 1](docs/image_composition-1.png "Title") -->
 <p align = "center">
     <img src="docs/image_composition-1.png" alt>
@@ -19,7 +18,6 @@
 <p align = "center">
     Demo 2: Virtual Furniture Try-on
 </p>
----
 
 ### Installation
 ```bash
