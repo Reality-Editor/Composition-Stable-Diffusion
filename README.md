@@ -76,7 +76,7 @@ python inference_sd.py --image_path $Test_DIR \
                     --instance_prompt $INSTANCE_PROMPT
 ```
 
-### Or else 
+### Or else
 using end-to-end run_sd.sh.
 
 ```bash
