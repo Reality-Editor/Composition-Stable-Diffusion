@@ -1,5 +1,6 @@
 diffusers
 accelerate
+torch
 torchvision
 transformers
 ftfy

@@ -67,20 +67,17 @@ accelerate launch --num_processes 1 train_sd.py \
 Finally, you can provide new images to achieve image composition.
 
 ```bash
-python inference.py --image_path $Test_DIR \
+python inference_sd.py --image_path $Test_DIR \
                     --model_path $MODEL_DIR \
                     --out_path $OUT_DIR \
                     --instance_prompt $INSTANCE_PROMPT
 ```
 
 ### Or else
-using end-to-end run.sh.
+using end-to-end run_sd.sh.
 
 ```bash
-python inference_sd.py --image_path $Test_DIR \
-                    --model_path $MODEL_DIR \
-                    --out_path $OUT_DIR \
-                    --instance_prompt $INSTANCE_PROMPT
+bash run_sd.sh
 ```
 ### Authors:
 * [RealityEditor](https://realityeditor.com.cn)
