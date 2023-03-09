@@ -2,9 +2,13 @@
 
 ### We achieve image composition via Stable Diffusion Model. Application includes Clothes Try-On and Furniture arrangement.
 
+---
 ![Example 1](docs/image_composition-1.png "Title")
 
+---
 ![Example 2](docs/image_composition-2.png "Title")
+
+---
 
 ### Installation
 ```bash
