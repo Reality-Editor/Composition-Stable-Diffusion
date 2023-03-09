@@ -1,13 +1,24 @@
 # Image Composition via Stable Diffusion 
 
-### We achieve image composition via Stable Diffusion Model. Application includes Clothes Try-On and Furniture arrangement.
+### We achieve image composition via Stable Diffusion Model. Application includes Virtual Clothes / Funiture Try-on.
 
 ---
-![Example 1](docs/image_composition-1.png "Title")
+<!-- ![Example 1](docs/image_composition-1.png "Title") -->
+<p align = "center">
+    <img src="docs/image_composition-1.png" alt>
+</p>
+<p align = "center">
+    Demo 1: Virtual Clothes Try-on
+</p>
 
 ---
-![Example 2](docs/image_composition-2.png "Title")
-
+<!-- ![Example 2](docs/image_composition-2.png "Title") -->
+<p align = "center">
+    <img src="docs/image_composition-2.png" alt>
+</p>
+<p align = "center">
+    Demo 2: Virtual Furniture Try-on
+</p>
 ---
 
 ### Installation

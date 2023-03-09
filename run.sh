@@ -18,7 +18,7 @@ accelerate launch --num_processes 1 train_lora.py \
   --resolution=512 \
   --train_batch_size=1 \
   --learning_rate=1e-4 \
-  --max_train_steps=1000 \
+  --max_train_steps=500 \
 
 python inference.py --image_path $Test_DIR \
                     --model_path $MODEL_DIR \

@@ -321,13 +321,13 @@ class DreamBoothDataset(Dataset):
         example["instance_images"] = self.image_transforms(instance_image)
         example["PIL_masks"] = instance_mask
 
-        prompt_path = self.instance_images_path[index % self.num_instance_images].with_suffix('.txt')
-        if os.path.exists(prompt_path):
-            with open(prompt_path) as f:
-                instance_prompt = f.readline().strip()
-            instance_prompt = instance_prompt + ', sks ' +  self.instance_prompt
-        else:
-            instance_prompt = 'sks ' +  self.instance_prompt
+        # prompt_path = self.instance_images_path[index % self.num_instance_images].with_suffix('.txt')
+        # if os.path.exists(prompt_path):
+        #     with open(prompt_path) as f:
+        #         instance_prompt = f.readline().strip()
+        #     instance_prompt = instance_prompt + ', sks ' +  self.instance_prompt
+        # else:
+        instance_prompt = 'a photo contains sks ' +  self.instance_prompt
         
         example["instance_prompt_ids"] = self.tokenizer(
             instance_prompt,

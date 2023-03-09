@@ -61,13 +61,6 @@ if __name__ == '__main__':
         img_paths.sort()
     else:
         img_paths = [args.image_path]
-    
-    # blip2 for image caption
-    processor_blip2 = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-    model_blip2 = Blip2ForConditionalGeneration.from_pretrained(
-        "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-    )
-    model_blip2.to(device)
 
     # clipseg for image segmentation
     processor_clipseg = CLIPSegProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
@@ -85,12 +78,7 @@ if __name__ == '__main__':
         mask_image = transforms.ToPILImage()(torch.sigmoid(preds)).convert("L").resize((512, 512))
         mask_image = mask_image.filter(ImageFilter.MaxFilter(11))
 
-        # blip2
-        inputs_blip2 = processor_blip2(images=init_image, return_tensors="pt").to(device, torch.float16)
-        generated_ids = model_blip2.generate(**inputs_blip2)
-        target_prompt = processor_blip2.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-        
-        prompt = target_prompt + f", sks {args.instance_prompt}"
+        prompt = f"a photo contains sks {args.instance_prompt}"
         image = pipe(prompt=prompt, image=init_image, 
                     mask_image=mask_image
                     ).images[0]
@@ -101,4 +89,4 @@ if __name__ == '__main__':
         cat_image.paste(init_image, (512*0, 0))
         cat_image.paste(image, (512*1, 0))
 
-        cat_image.save(f'{args.out_path}/{os.path.basename(img_path)}')
+        cat_image.save(f"{args.out_path}/{os.path.basename(img_path)}")
