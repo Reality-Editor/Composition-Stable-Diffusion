@@ -22,9 +22,9 @@
 ### Installation
 * Requirements
   ```bash
-  conda install pytorch==1.12.0 torchvision==0.13.0 torchaudio==0.12.0 cudatoolkit=11.3 -c pytorch
-  pip install -r requirements.txt
-  ```
+conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch 
+pip install -r requirements.txt
+```
 
 * Initialize an [🤗Accelerate](https://github.com/huggingface/accelerate/) environment with
   ```bash
@@ -100,5 +100,5 @@ We tested the code on RTX3090 GPU. If there is Out-of-Memory error, please refer
 * [dreambooth](https://github.com/huggingface/diffusers/tree/main/examples/dreambooth)
 
 ### Authors:
-* [RealityEditor](https://realityeditor.com.cn)
 * [Tao Hu](https://tau-yihouxiang.github.io)
+* [RealityEditor](https://realityeditor.com.cn)
