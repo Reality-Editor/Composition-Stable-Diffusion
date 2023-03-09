@@ -94,7 +94,7 @@ bash run_sd.sh
 ```
 
 ### GPU Memory
-We test the code in RTX3090 GPU, if there is Out-of-Memory error, Please refer to for low memory training: 
+We tested the code on RTX3090 GPU. If there is Out-of-Memory error, please refer to for low memory training: 
 
 * [dreambooth](https://github.com/huggingface/diffusers/tree/main/examples/dreambooth)
 
