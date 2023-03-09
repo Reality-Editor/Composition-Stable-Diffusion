@@ -21,7 +21,7 @@ accelerate launch --num_processes 1 train_sd.py \
   --learning_rate=5e-6 \
   --lr_scheduler="constant" \
   --lr_warmup_steps=0 \
-  --max_train_steps=800
+  --max_train_steps=1000
 
 python inference_sd.py --image_path $Test_DIR \
                     --model_path $MODEL_DIR \
