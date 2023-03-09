@@ -1,8 +1,8 @@
-diffusers
-accelerate
-torch
-torchvision
+diffusers==0.14.0
+accelerate==0.16.0
+torch==1.12.0
+torchvision==0.13.0
 transformers
 ftfy
-tensorboard
-Jinja2
+tensorboard==1.15.0
+Jinja2==3.1.2
