@@ -63,7 +63,7 @@ accelerate launch --num_processes 1 train_sd.py \
   --lr_scheduler="constant" \
   --lr_warmup_steps=0 \
   --max_train_steps=800 \
-  --checkpointing_steps=5=1000
+  --checkpointing_steps=1000
 ```
 
 ### 4. Image Composition
