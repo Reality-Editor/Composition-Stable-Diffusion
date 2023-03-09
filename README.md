@@ -20,10 +20,21 @@
 </p>
 
 ### Installation
-```bash
-pip install -r requirements.txt
+* Requirements
+  ```bash
+  pip install -r requirements.txt
+  ```
 
-```
+* Initialize an [🤗Accelerate](https://github.com/huggingface/accelerate/) environment with:
+  ```bash
+  accelerate config default
+  ```
+
+* Run the following command to authenticate your token
+
+  ```bash
+  huggingface-cli login
+  ```
 
 ### 0. Prepare Images
 Please provide at least one images in .jpg format and instance prompt.
