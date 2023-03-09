@@ -236,7 +236,7 @@ def parse_args():
     parser.add_argument(
         "--checkpointing_steps",
         type=int,
-        default=500,
+        default=2000,
         help=(
             "Save a checkpoint of the training state every X updates. These checkpoints can be used both as final"
             " checkpoints in case they are better than the last checkpoint and are suitable for resuming training"
@@ -320,7 +320,7 @@ class DreamBoothDataset(Dataset):
 
         # mask
         instance_mask = Image.open(self.instance_images_path[index % self.num_instance_images].with_suffix('.png')).resize(instance_image.size)
-        instance_mask = instance_mask.filter(ImageFilter.MaxFilter(11))
+        instance_mask = instance_mask.filter(ImageFilter.MaxFilter(21))
         if not instance_mask.mode == "RGB":
             instance_mask = instance_mask.convert("RGB")
         instance_mask = self.image_transforms_resize_and_crop(instance_mask)

@@ -73,7 +73,7 @@ if __name__ == '__main__':
         outputs = model_clipseg(**inputs_clipseg)
         preds = outputs.logits.unsqueeze(0)[0].detach().cpu()
         mask_image = transforms.ToPILImage()(torch.sigmoid(preds)).convert("L").resize((512, 512))
-        mask_image = mask_image.filter(ImageFilter.MaxFilter(11))
+        mask_image = mask_image.filter(ImageFilter.MaxFilter(21))
 
         prompt = f"a photo with sks {args.instance_prompt}"
         image = pipe(prompt=prompt, image=init_image, 
