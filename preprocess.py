@@ -1,6 +1,6 @@
 from PIL import Image
 from transformers import CLIPSegProcessor, CLIPSegForImageSegmentation
-from transformers import Blip2Processor, Blip2ForConditionalGeneration
+# from transformers import Blip2Processor, Blip2ForConditionalGeneration
 from torchvision import transforms
 import torch
 import glob, os, tqdm

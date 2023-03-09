@@ -6,7 +6,6 @@ import torch
 import argparse
 from torchvision import transforms
 from diffusers import StableDiffusionInpaintPipeline, DDPMScheduler
-from transformers import Blip2Processor, Blip2ForConditionalGeneration
 from transformers import CLIPSegProcessor, CLIPSegForImageSegmentation
 
 def parse_args():

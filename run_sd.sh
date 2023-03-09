@@ -1,9 +1,9 @@
 export MODEL_NAME="runwayml/stable-diffusion-inpainting"
-export INSTANCE_DIR="data/sofa"
-export Test_DIR="data/sofa_test"
-export OUT_DIR="out/sofa"
-export INSTANCE_PROMPT="sofa"
-export MODEL_DIR="logs/sofa"
+export INSTANCE_DIR="data/tops"
+export Test_DIR="data/tops_test"
+export OUT_DIR="out/tops"
+export INSTANCE_PROMPT="tops"
+export MODEL_DIR="logs/tops"
 
 # preprocess data
 python preprocess.py --instance_data_dir $INSTANCE_DIR \
