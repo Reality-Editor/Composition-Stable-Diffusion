@@ -101,39 +101,10 @@ def parse_args():
         help="A folder containing the training data of instance images.",
     )
     parser.add_argument(
-        "--class_data_dir",
-        type=str,
-        default=None,
-        required=False,
-        help="A folder containing the training data of class images.",
-    )
-    parser.add_argument(
         "--instance_prompt",
         type=str,
         default=None,
         help="The prompt with identifier specifying the instance",
-    )
-    parser.add_argument(
-        "--class_prompt",
-        type=str,
-        default=None,
-        help="The prompt to specify images in the same class as provided instance images.",
-    )
-    parser.add_argument(
-        "--with_prior_preservation",
-        default=False,
-        action="store_true",
-        help="Flag to add prior preservation loss.",
-    )
-    parser.add_argument("--prior_loss_weight", type=float, default=1.0, help="The weight of prior preservation loss.")
-    parser.add_argument(
-        "--num_class_images",
-        type=int,
-        default=100,
-        help=(
-            "Minimal class images for prior preservation loss. If not have enough images, additional images will be"
-            " sampled with class_prompt."
-        ),
     )
     parser.add_argument(
         "--output_dir",
@@ -207,7 +178,7 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--lr_warmup_steps", type=int, default=500, help="Number of steps for the warmup in the lr scheduler."
+        "--lr_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
     )
     parser.add_argument(
         "--use_8bit_adam", action="store_true", help="Whether or not to use 8-bit Adam from bitsandbytes."
@@ -249,7 +220,7 @@ def parse_args():
     parser.add_argument(
         "--checkpointing_steps",
         type=int,
-        default=500,
+        default=2000,
         help=(
             "Save a checkpoint of the training state every X updates. These checkpoints can be used both as final"
             " checkpoints in case they are better than the last checkpoint and are suitable for resuming training"
@@ -277,12 +248,6 @@ def parse_args():
     if args.instance_data_dir is None:
         raise ValueError("You must specify a train data directory.")
 
-    # if args.with_prior_preservation:
-    #     if args.class_data_dir is None:
-    #         raise ValueError("You must specify a data directory for class images.")
-    #     if args.class_prompt is None:
-    #         raise ValueError("You must specify prompt for class images.")
-
     return args
 
 
@@ -303,8 +268,6 @@ class DreamBoothDataset(Dataset):
         instance_data_root,
         instance_prompt,
         tokenizer,
-        class_data_root=None,
-        class_prompt=None,
         size=512,
         center_crop=False,
     ):
@@ -320,16 +283,6 @@ class DreamBoothDataset(Dataset):
         self.num_instance_images = len(self.instance_images_path)
         self.instance_prompt = instance_prompt
         self._length = self.num_instance_images
-
-        if class_data_root is not None:
-            self.class_data_root = Path(class_data_root)
-            self.class_data_root.mkdir(parents=True, exist_ok=True)
-            self.class_images_path = list(self.class_data_root.glob("*.jpg"))
-            self.num_class_images = len(self.class_images_path)
-            self._length = max(self.num_class_images, self.num_instance_images)
-            self.class_prompt = class_prompt
-        else:
-            self.class_data_root = None
 
         self.image_transforms_resize_and_crop = transforms.Compose(
             [
@@ -369,8 +322,12 @@ class DreamBoothDataset(Dataset):
         example["PIL_masks"] = instance_mask
 
         prompt_path = self.instance_images_path[index % self.num_instance_images].with_suffix('.txt')
-        with open(prompt_path) as f:
-            instance_prompt = f.readline().strip()
+        if os.path.exists(prompt_path):
+            with open(prompt_path) as f:
+                instance_prompt = f.readline().strip()
+            instance_prompt = instance_prompt + ', sks ' +  self.instance_prompt
+        else:
+            instance_prompt = 'sks ' +  self.instance_prompt
         
         example["instance_prompt_ids"] = self.tokenizer(
             instance_prompt,
@@ -378,30 +335,6 @@ class DreamBoothDataset(Dataset):
             truncation=True,
             max_length=self.tokenizer.model_max_length,
         ).input_ids
-
-        # if self.class_data_root:
-        #     class_image = Image.open(self.class_images_path[index % self.num_class_images])
-        #     if not class_image.mode == "RGB":
-        #         class_image = class_image.convert("RGB")
-        #     class_image = self.image_transforms_resize_and_crop(class_image)
-        #     example["class_images"] = self.image_transforms(class_image)
-        #     example["class_PIL_images"] = class_image
-
-        #     class_mask = Image.open(self.class_images_path[index % self.num_class_images].with_suffix('.png'))
-        #     class_mask = class_mask.filter(ImageFilter.MaxFilter(11))
-
-        #     if not class_mask.mode == "RGB":
-        #         class_mask = class_mask.convert("RGB")
-        #     class_mask = self.image_transforms_resize_and_crop(class_mask)
-        #     example["class_masks"] = self.image_transforms(class_mask)
-        #     example["class_PIL_masks"] = class_mask
-
-        #     example["class_prompt_ids"] = self.tokenizer(
-        #         self.class_prompt,
-        #         padding="do_not_pad",
-        #         truncation=True,
-        #         max_length=self.tokenizer.model_max_length,
-        #     ).input_ids
 
         return example
 
@@ -455,51 +388,6 @@ def main():
 
     if args.seed is not None:
         set_seed(args.seed)
-
-    # if args.with_prior_preservation:
-    #     class_images_dir = Path(args.class_data_dir)
-    #     if not class_images_dir.exists():
-    #         class_images_dir.mkdir(parents=True)
-    #     cur_class_images = len(list(class_images_dir.iterdir()))
-
-    #     if cur_class_images < args.num_class_images:
-    #         torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
-    #         pipeline = StableDiffusionInpaintPipeline.from_pretrained(
-    #             args.pretrained_model_name_or_path, torch_dtype=torch_dtype, safety_checker=None
-    #         )
-    #         pipeline.set_progress_bar_config(disable=True)
-
-    #         num_new_images = args.num_class_images - cur_class_images
-    #         logger.info(f"Number of class images to sample: {num_new_images}.")
-
-    #         sample_dataset = PromptDataset(args.class_prompt, num_new_images)
-    #         sample_dataloader = torch.utils.data.DataLoader(
-    #             sample_dataset, batch_size=args.sample_batch_size, num_workers=1
-    #         )
-
-    #         sample_dataloader = accelerator.prepare(sample_dataloader)
-    #         pipeline.to(accelerator.device)
-    #         transform_to_pil = transforms.ToPILImage()
-    #         for example in tqdm(
-    #             sample_dataloader, desc="Generating class images", disable=not accelerator.is_local_main_process
-    #         ):
-    #             bsz = len(example["prompt"])
-    #             fake_images = torch.rand((3, args.resolution, args.resolution))
-    #             transform_to_pil = transforms.ToPILImage()
-    #             fake_pil_images = transform_to_pil(fake_images)
-
-    #             fake_mask = random_mask((args.resolution, args.resolution), ratio=1, mask_full_image=True)
-
-    #             images = pipeline(prompt=example["prompt"], mask_image=fake_mask, image=fake_pil_images).images
-
-    #             for i, image in enumerate(images):
-    #                 hash_image = hashlib.sha1(image.tobytes()).hexdigest()
-    #                 image_filename = class_images_dir / f"{example['index'][i] + cur_class_images}-{hash_image}.jpg"
-    #                 image.save(image_filename)
-
-    #         del pipeline
-    #         if torch.cuda.is_available():
-    #             torch.cuda.empty_cache()
 
     # Handle the repository creation
     if accelerator.is_main_process:
@@ -620,8 +508,6 @@ def main():
     train_dataset = DreamBoothDataset(
         instance_data_root=args.instance_data_dir,
         instance_prompt=args.instance_prompt,
-        class_data_root=args.class_data_dir if args.with_prior_preservation else None,
-        class_prompt=args.class_prompt,
         tokenizer=tokenizer,
         size=args.resolution,
         center_crop=args.center_crop,
@@ -630,13 +516,6 @@ def main():
     def collate_fn(examples):
         input_ids = [example["instance_prompt_ids"] for example in examples]
         pixel_values = [example["instance_images"] for example in examples]
-
-        # Concat class and instance examples for prior preservation.
-        # We do this to avoid doing two forward passes.
-        # if args.with_prior_preservation:
-        #     input_ids += [example["class_prompt_ids"] for example in examples]
-        #     pixel_values += [example["class_images"] for example in examples]
-        #     pior_pil = [example["class_PIL_images"] for example in examples]
 
         masks = []
         masked_images = []
@@ -649,17 +528,6 @@ def main():
 
             masks.append(mask)
             masked_images.append(masked_image)
-
-        # if args.with_prior_preservation:
-        #     for pil_image in pior_pil:
-        #         # generate a random mask
-        #         # mask = random_mask(pil_image.size, 1, False)
-        #         mask = example["PIL_masks"]
-        #         # prepare mask and masked image
-        #         mask, masked_image = prepare_mask_and_masked_image(pil_image, mask)
-
-        #         masks.append(mask)
-        #         masked_images.append(masked_image)
 
         pixel_values = torch.stack(pixel_values)
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
@@ -704,7 +572,7 @@ def main():
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
-        accelerator.init_trackers("dreambooth-inpaint-lora", config=vars(args))
+        accelerator.init_trackers("tensorboard", config=vars(args))
 
     # Train!
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -807,20 +675,6 @@ def main():
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
 
-                # if args.with_prior_preservation:
-                #     # Chunk the noise and noise_pred into two parts and compute the loss on each part separately.
-                #     noise_pred, noise_pred_prior = torch.chunk(noise_pred, 2, dim=0)
-                #     target, target_prior = torch.chunk(target, 2, dim=0)
-
-                #     # Compute instance loss
-                #     loss = F.mse_loss(noise_pred.float(), target.float(), reduction="none").mean([1, 2, 3]).mean()
-
-                #     # Compute prior loss
-                #     prior_loss = F.mse_loss(noise_pred_prior.float(), target_prior.float(), reduction="mean")
-
-                #     # Add the prior loss to the instance loss.
-                #     loss = loss + args.prior_loss_weight * prior_loss
-                # else:
                 loss = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
 
                 accelerator.backward(loss)
