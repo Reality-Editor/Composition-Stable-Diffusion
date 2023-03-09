@@ -25,7 +25,7 @@
   pip install -r requirements.txt
   ```
 
-* Initialize an [🤗Accelerate](https://github.com/huggingface/accelerate/) environment with:
+* Initialize an [🤗Accelerate](https://github.com/huggingface/accelerate/) environment with
   ```bash
   accelerate config default
   ```
