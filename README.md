@@ -27,6 +27,7 @@ pip install -r requirements.txt
 
 ### 0. Prepare Images
 Please provide at least one images in .jpg format and instance prompt.
+For example, images in ./data/sofa
 
 ### 1. Set Environment
 ```bash
