@@ -44,7 +44,7 @@ export INSTANCE_PROMPT="sofa"
 Please provide at least one images in .jpg format and instance prompt. The preprocess.py script will generate captions and instance masks.
 
 ```bash
-python preprocess.py --instance_dir $INSTANCE_DIR \
+python preprocess.py --instance_data_dir $INSTANCE_DIR \
                      --instance_prompt $INSTANCE_PROMPT
 ```
 
@@ -52,7 +52,7 @@ python preprocess.py --instance_dir $INSTANCE_DIR \
 We then finetune with LoRA to embed the instance images and prompt into stable diffusion model.
 
 ```bash
-accelerate launch --num_processes 1 train_lora.py \
+accelerate launch --num_processes 1 train_sd.py \
   --pretrained_model_name_or_path=$MODEL_NAME  \
   --instance_data_dir=$INSTANCE_DIR \
   --output_dir=$MODEL_DIR \
@@ -77,10 +77,11 @@ python inference.py --image_path $Test_DIR \
 using end-to-end run.sh.
 
 ```bash
-python inference.py --image_path $Test_DIR \
+python inference_sd.py --image_path $Test_DIR \
                     --model_path $MODEL_DIR \
                     --out_path $OUT_DIR \
                     --instance_prompt $INSTANCE_PROMPT
 ```
-
-### Author: [RealityEditor](https://realityeditor.com.cn)
+### Authors:
+* [RealityEditor](https://realityeditor.com.cn)
+* [Tao Hu](https://tau-yihouxiang.github.io)

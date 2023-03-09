@@ -1,5 +1,6 @@
 import argparse
 import hashlib
+import itertools
 import math
 import os
 import random
@@ -14,20 +15,28 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from huggingface_hub import HfFolder, Repository, create_repo, whoami
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 from torch.utils.data import Dataset
 from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
-from diffusers import AutoencoderKL, DDPMScheduler, StableDiffusionInpaintPipeline, UNet2DConditionModel
-from diffusers.loaders import AttnProcsLayers
-from diffusers.models.cross_attention import LoRACrossAttnProcessor
+from transformers import (
+    CLIPSegForImageSegmentation,
+    CLIPSegProcessor,
+    AutoProcessor,
+    CLIPVisionModelWithProjection
+)
+
+from diffusers import (
+    AutoencoderKL,
+    DDPMScheduler,
+    StableDiffusionInpaintPipeline,
+    StableDiffusionPipeline,
+    UNet2DConditionModel,
+)
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version
-from diffusers.utils.import_utils import is_xformers_available
-
-from PIL import Image, ImageDraw, ImageFilter
 
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
@@ -107,9 +116,16 @@ def parse_args():
         help="The prompt with identifier specifying the instance",
     )
     parser.add_argument(
+        "--with_prior_preservation",
+        default=False,
+        action="store_true",
+        help="Flag to add prior preservation loss.",
+    )
+
+    parser.add_argument(
         "--output_dir",
         type=str,
-        default="tensorboard",
+        default="text-inversion-model",
         help="The output directory where the model predictions and checkpoints will be written.",
     )
     parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
@@ -178,7 +194,7 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--lr_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
+        "--lr_warmup_steps", type=int, default=500, help="Number of steps for the warmup in the lr scheduler."
     )
     parser.add_argument(
         "--use_8bit_adam", action="store_true", help="Whether or not to use 8-bit Adam from bitsandbytes."
@@ -220,7 +236,7 @@ def parse_args():
     parser.add_argument(
         "--checkpointing_steps",
         type=int,
-        default=2000,
+        default=500,
         help=(
             "Save a checkpoint of the training state every X updates. These checkpoints can be used both as final"
             " checkpoints in case they are better than the last checkpoint and are suitable for resuming training"
@@ -236,9 +252,6 @@ def parse_args():
             ' `--checkpointing_steps`, or `"latest"` to automatically select the last available checkpoint.'
         ),
     )
-    parser.add_argument(
-        "--enable_xformers_memory_efficient_attention", action="store_true", help="Whether or not to use xformers."
-    )
 
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
@@ -250,12 +263,6 @@ def parse_args():
 
     return args
 
-
-def merge_rgb_mask_to_rgba(rgb, mask):
-    rgba_image = rgb.copy().convert('RGBA')
-    alpha = mask.convert('L')
-    rgba_image.putalpha(alpha)
-    return rgba_image
 
 class DreamBoothDataset(Dataset):
     """
@@ -286,7 +293,7 @@ class DreamBoothDataset(Dataset):
 
         self.image_transforms_resize_and_crop = transforms.Compose(
             [
-                transforms.Resize((int(size * 1.2), int(size * 1.2)), interpolation=transforms.InterpolationMode.BILINEAR),
+                transforms.Resize((int(size), int(size)), interpolation=transforms.InterpolationMode.BILINEAR),
                 transforms.CenterCrop(size) if center_crop else transforms.RandomCrop(size),
             ]
         )
@@ -306,29 +313,22 @@ class DreamBoothDataset(Dataset):
         instance_image = Image.open(self.instance_images_path[index % self.num_instance_images])
         if not instance_image.mode == "RGB":
             instance_image = instance_image.convert("RGB")
-
-        # mask
-        instance_mask = Image.open(self.instance_images_path[index % self.num_instance_images].with_suffix('.png'))
-        instance_mask = instance_mask.filter(ImageFilter.MaxFilter(11)).resize(instance_image.size)
-
-        rgba = merge_rgb_mask_to_rgba(instance_image, instance_mask)
-        rgba = self.image_transforms_resize_and_crop(rgba)
-        r, g, b, a = rgba.split()
-        instance_image = Image.merge('RGB', (r, g, b))
-        instance_mask = a.convert('RGB')
+        instance_image = self.image_transforms_resize_and_crop(instance_image)
 
         example["PIL_images"] = instance_image
         example["instance_images"] = self.image_transforms(instance_image)
-        example["PIL_masks"] = instance_mask
 
-        # prompt_path = self.instance_images_path[index % self.num_instance_images].with_suffix('.txt')
-        # if os.path.exists(prompt_path):
-        #     with open(prompt_path) as f:
-        #         instance_prompt = f.readline().strip()
-        #     instance_prompt = instance_prompt + ', sks ' +  self.instance_prompt
-        # else:
-        instance_prompt = 'a photo with sks ' +  self.instance_prompt
+        # mask
+        instance_mask = Image.open(self.instance_images_path[index % self.num_instance_images].with_suffix('.png')).resize(instance_image.size)
+        instance_mask = instance_mask.filter(ImageFilter.MaxFilter(11))
+        if not instance_mask.mode == "RGB":
+            instance_mask = instance_mask.convert("RGB")
+        instance_mask = self.image_transforms_resize_and_crop(instance_mask)
+        example["PIL_masks"] = instance_mask
+        example["instance_masks"] = self.image_transforms(instance_mask)
         
+        instance_prompt = 'a photo with sks ' +  self.instance_prompt
+
         example["instance_prompt_ids"] = self.tokenizer(
             instance_prompt,
             padding="do_not_pad",
@@ -418,64 +418,14 @@ def main():
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae")
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet")
 
-    # We only train the additional adapter LoRA layers
     vae.requires_grad_(False)
-    text_encoder.requires_grad_(False)
-    unet.requires_grad_(False)
+    if not args.train_text_encoder:
+        text_encoder.requires_grad_(False)
 
-    weight_dtype = torch.float32
-    if args.mixed_precision == "fp16":
-        weight_dtype = torch.float16
-    elif args.mixed_precision == "bf16":
-        weight_dtype = torch.bfloat16
-
-    # Move text_encode and vae to gpu.
-    # For mixed precision training we cast the text_encoder and vae weights to half-precision
-    # as these models are only used for inference, keeping weights in full precision is not required.
-    unet.to(accelerator.device, dtype=weight_dtype)
-    vae.to(accelerator.device, dtype=weight_dtype)
-    text_encoder.to(accelerator.device, dtype=weight_dtype)
-
-    if args.enable_xformers_memory_efficient_attention:
-        if is_xformers_available():
-            unet.enable_xformers_memory_efficient_attention()
-        else:
-            raise ValueError("xformers is not available. Make sure it is installed correctly")
-
-    # now we will add new LoRA weights to the attention layers
-    # It's important to realize here how many attention weights will be added and of which sizes
-    # The sizes of the attention layers consist only of two different variables:
-    # 1) - the "hidden_size", which is increased according to `unet.config.block_out_channels`.
-    # 2) - the "cross attention size", which is set to `unet.config.cross_attention_dim`.
-
-    # Let's first see how many attention processors we will have to set.
-    # For Stable Diffusion, it should be equal to:
-    # - down blocks (2x attention layers) * (2x transformer layers) * (3x down blocks) = 12
-    # - mid blocks (2x attention layers) * (1x transformer layers) * (1x mid blocks) = 2
-    # - up blocks (2x attention layers) * (3x transformer layers) * (3x down blocks) = 18
-    # => 32 layers
-
-    # Set correct lora layers
-    lora_attn_procs = {}
-    for name in unet.attn_processors.keys():
-        cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
-        if name.startswith("mid_block"):
-            hidden_size = unet.config.block_out_channels[-1]
-        elif name.startswith("up_blocks"):
-            block_id = int(name[len("up_blocks.")])
-            hidden_size = list(reversed(unet.config.block_out_channels))[block_id]
-        elif name.startswith("down_blocks"):
-            block_id = int(name[len("down_blocks.")])
-            hidden_size = unet.config.block_out_channels[block_id]
-
-        lora_attn_procs[name] = LoRACrossAttnProcessor(
-            hidden_size=hidden_size, cross_attention_dim=cross_attention_dim
-        )
-
-    unet.set_attn_processor(lora_attn_procs)
-    lora_layers = AttnProcsLayers(unet.attn_processors)
-
-    accelerator.register_for_checkpointing(lora_layers)
+    if args.gradient_checkpointing:
+        unet.enable_gradient_checkpointing()
+        if args.train_text_encoder:
+            text_encoder.gradient_checkpointing_enable()
 
     if args.scale_lr:
         args.learning_rate = (
@@ -495,8 +445,11 @@ def main():
     else:
         optimizer_class = torch.optim.AdamW
 
+    params_to_optimize = (
+        itertools.chain(unet.parameters(), text_encoder.parameters()) if args.train_text_encoder else unet.parameters()
+    )
     optimizer = optimizer_class(
-        lora_layers.parameters(),
+        params_to_optimize,
         lr=args.learning_rate,
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
@@ -517,17 +470,31 @@ def main():
         input_ids = [example["instance_prompt_ids"] for example in examples]
         pixel_values = [example["instance_images"] for example in examples]
 
+        # Concat class and instance examples for prior preservation.
+        # We do this to avoid doing two forward passes.
+
         masks = []
         masked_images = []
         for example in examples:
             pil_image = example["PIL_images"]
             # generate a random mask
+            # mask = random_mask(pil_image.size, 1, False)
             mask = example["PIL_masks"]
             # prepare mask and masked image
             mask, masked_image = prepare_mask_and_masked_image(pil_image, mask)
 
             masks.append(mask)
             masked_images.append(masked_image)
+
+        if args.with_prior_preservation:
+            for pil_image, mask in zip(pior_pil, pior_pil_mask):
+                # generate a random mask
+                # mask = random_mask(pil_image.size, 1, False)
+                # prepare mask and masked image
+                mask, masked_image = prepare_mask_and_masked_image(pil_image, mask)
+
+                masks.append(mask)
+                masked_images.append(masked_image)
 
         pixel_values = torch.stack(pixel_values)
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
@@ -556,11 +523,29 @@ def main():
         num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
     )
 
-    # Prepare everything with our `accelerator`.
-    lora_layers, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        lora_layers, optimizer, train_dataloader, lr_scheduler
-    )
-    # accelerator.register_for_checkpointing(lr_scheduler)
+    if args.train_text_encoder:
+        unet, text_encoder, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+            unet, text_encoder, optimizer, train_dataloader, lr_scheduler
+        )
+    else:
+        unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+            unet, optimizer, train_dataloader, lr_scheduler
+        )
+    accelerator.register_for_checkpointing(lr_scheduler)
+
+    weight_dtype = torch.float32
+    if args.mixed_precision == "fp16":
+        weight_dtype = torch.float16
+    elif args.mixed_precision == "bf16":
+        weight_dtype = torch.bfloat16
+
+    # Move text_encode and vae to gpu.
+    # For mixed precision training we cast the text_encoder and vae weights to half-precision
+    # as these models are only used for inference, keeping weights in full precision is not required.
+    vae.to(accelerator.device, dtype=weight_dtype)
+
+    if not args.train_text_encoder:
+        text_encoder.to(accelerator.device, dtype=weight_dtype)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -572,7 +557,7 @@ def main():
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
-        accelerator.init_trackers("tensorboard", config=vars(args))
+        accelerator.init_trackers("dreambooth", config=vars(args))
 
     # Train!
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -627,7 +612,6 @@ def main():
 
             with accelerator.accumulate(unet):
                 # Convert images to latent space
-
                 latents = vae.encode(batch["pixel_values"].to(dtype=weight_dtype)).latent_dist.sample()
                 latents = latents * vae.config.scaling_factor
 
@@ -675,11 +659,29 @@ def main():
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
 
-                loss = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
+                if args.with_prior_preservation:
+                    # Chunk the noise and noise_pred into two parts and compute the loss on each part separately.
+                    noise_pred, noise_pred_prior = torch.chunk(noise_pred, 2, dim=0)
+                    target, target_prior = torch.chunk(target, 2, dim=0)
+
+                    # Compute instance loss
+                    loss = F.mse_loss(noise_pred.float(), target.float(), reduction="none").mean([1, 2, 3]).mean()
+
+                    # Compute prior loss
+                    prior_loss = F.mse_loss(noise_pred_prior.float(), target_prior.float(), reduction="mean")
+
+                    # Add the prior loss to the instance loss.
+                    loss = loss + args.prior_loss_weight * prior_loss
+                else:
+                    loss = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
-                    params_to_clip = lora_layers.parameters()
+                    params_to_clip = (
+                        itertools.chain(unet.parameters(), text_encoder.parameters())
+                        if args.train_text_encoder
+                        else unet.parameters()
+                    )
                     accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
                 optimizer.step()
                 lr_scheduler.step()
@@ -696,7 +698,12 @@ def main():
                         accelerator.save_state(save_path)
                         logger.info(f"Saved state to {save_path}")
 
-                        unet.to(torch.float32).save_attn_procs(save_path)
+                        pipeline = StableDiffusionPipeline.from_pretrained(
+                            args.pretrained_model_name_or_path,
+                            unet=accelerator.unwrap_model(unet),
+                            text_encoder=accelerator.unwrap_model(text_encoder),
+                        )
+                        pipeline.save_pretrained(save_path)
 
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)
@@ -707,10 +714,14 @@ def main():
 
         accelerator.wait_for_everyone()
 
-    # Save the lora layers
+    # Create the pipeline using using the trained modules and save it.
     if accelerator.is_main_process:
-        unet = unet.to(torch.float32)
-        unet.save_attn_procs(args.output_dir)
+        pipeline = StableDiffusionPipeline.from_pretrained(
+            args.pretrained_model_name_or_path,
+            unet=accelerator.unwrap_model(unet),
+            text_encoder=accelerator.unwrap_model(text_encoder),
+        )
+        pipeline.save_pretrained(args.output_dir)
 
         if args.push_to_hub:
             repo.push_to_hub(commit_message="End of training", blocking=False, auto_lfs_prune=True)

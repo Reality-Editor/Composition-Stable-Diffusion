@@ -78,7 +78,7 @@ if __name__ == '__main__':
         mask_image = transforms.ToPILImage()(torch.sigmoid(preds)).convert("L").resize((512, 512))
         mask_image = mask_image.filter(ImageFilter.MaxFilter(11))
 
-        prompt = f"a photo contains sks {args.instance_prompt}"
+        prompt = f"a photo with sks {args.instance_prompt}"
         image = pipe(prompt=prompt, image=init_image, 
                     mask_image=mask_image
                     ).images[0]
