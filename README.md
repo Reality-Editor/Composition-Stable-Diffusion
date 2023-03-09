@@ -63,7 +63,7 @@ python preprocess.py --instance_data_dir $INSTANCE_DIR \
 We then finetune Stable Diffusion Inpainting to embed the instance images and prompt into stable diffusion model.
 
 ```bash
-accelerate launch --num_processes 1 train_sd.py \
+accelerate launch --num_processes 1 train.py \
   --pretrained_model_name_or_path=$MODEL_NAME  \
   --instance_data_dir=$INSTANCE_DIR \
   --output_dir=$MODEL_DIR \

@@ -10,7 +10,7 @@ python preprocess.py --instance_data_dir $INSTANCE_DIR \
                      --instance_prompt $INSTANCE_PROMPT
 
 # CUDA_VISIBLE_DEVICES=0
-accelerate launch --num_processes 1 train_sd.py \
+accelerate launch --num_processes 1 train.py \
   --pretrained_model_name_or_path=$MODEL_NAME  \
   --instance_data_dir=$INSTANCE_DIR \
   --output_dir=$MODEL_DIR \
