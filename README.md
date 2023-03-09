@@ -47,7 +47,7 @@ python preprocess.py --instance_data_dir $INSTANCE_DIR \
                      --instance_prompt $INSTANCE_PROMPT
 ```
 
-### 3. Finetune with LoRA
+### 3. Finetune Stable Diffusion Inpainting
 We then finetune with LoRA to embed the instance images and prompt into stable diffusion model.
 
 ```bash
