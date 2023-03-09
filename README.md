@@ -80,7 +80,7 @@ accelerate launch --num_processes 1 train_sd.py \
 Finally, you can provide new images to achieve image composition.
 
 ```bash
-python inference_sd.py --image_path $Test_DIR \
+python inference.py --image_path $Test_DIR \
                     --model_path $MODEL_DIR \
                     --out_path $OUT_DIR \
                     --instance_prompt $INSTANCE_PROMPT
@@ -90,7 +90,7 @@ python inference_sd.py --image_path $Test_DIR \
 using end-to-end run_sd.sh.
 
 ```bash
-bash run_sd.sh
+bash run.sh
 ```
 
 ### GPU Memory
