@@ -59,8 +59,8 @@ python preprocess.py --instance_data_dir $INSTANCE_DIR \
                      --instance_prompt $INSTANCE_PROMPT
 ```
 
-### 3. Finetune Stable Diffusion Inpainting
-We then finetune Stable Diffusion Inpainting to embed the instance images and prompt into stable diffusion model.
+### 3. Finetune
+We then embed the instance images and prompt into stable diffusion model.
 
 ```bash
 accelerate launch --num_processes 1 train.py \
